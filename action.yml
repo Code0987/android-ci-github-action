@@ -1,5 +1,5 @@
 name: 'android-ci-github-action'
-description: 'A github action for image for building Android apps with support for multiple SDK Build Tools.'
+description: 'A Github action for image for building Android apps with support for multiple SDK Build Tools.'
 author: 'code0987 <durgapalneeraj@gmail.com>'
 branding:
   icon: 'box'

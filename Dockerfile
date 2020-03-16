@@ -1,7 +1,7 @@
 FROM code0987/android-ci:latest
 
 LABEL "com.github.actions.name"="Android CI Github Action"
-LABEL "com.github.actions.description"="An github action of image for building Android apps with support for multiple SDK Build Tools. This Docker image contains the Android SDK and most common packages necessary for building Android apps in a CI tool."
+LABEL "com.github.actions.description"="A Github action of image for building Android apps with support for multiple SDK Build Tools. This Docker image contains the Android SDK and most common packages necessary for building Android apps in a CI tool."
 LABEL "com.github.actions.icon"="box"
 LABEL "com.github.actions.color"="green"
 
