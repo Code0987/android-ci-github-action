@@ -2,7 +2,7 @@
 
 A Github action of image for building Android apps with support for multiple SDK Build Tools. This Docker image contains the Android SDK and most common packages necessary for building Android apps in a CI tool. 
 
-More details [code0987/android-ci](https://github.com/code09887/android-ci).
+More details [code0987/android-ci](https://github.com/code0987/android-ci).
 
 ### Usage and example
 
