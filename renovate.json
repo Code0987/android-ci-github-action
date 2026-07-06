@@ -1,5 +1,16 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:base"
+    "config:recommended"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "packageRules": [
+    {
+      "description": "Action is deprecated; group routine CI action bumps",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    }
   ]
 }

@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deprecated" to publish a release from VERSION'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate confirmation and create tag
+        run: |
+          if [ "${{ inputs.confirm }}" != "deprecated" ]; then
+            echo "::error::Refusing to release. Confirmation input must be exactly: deprecated"
+            exit 1
+          fi
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          TAG="v${VERSION}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Bump VERSION for a new release."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG (deprecated)"
+          git push origin "$TAG"
+          echo "Pushed $TAG. The tag-push Release workflow will publish artifacts."
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag metadata
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          EXPECTED="v${VERSION}"
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "::error::Tag '$TAG' does not match VERSION file ('$EXPECTED')."
+            exit 1
+          fi
+          MAJOR="${VERSION%%.*}"
+          OWNER_LC=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major_tag=v${MAJOR}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${OWNER_LC}/android-ci-github-action" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog section
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          import os
+          version = os.environ["VERSION"]
+          text = Path("CHANGELOG.md").read_text()
+          marker = f"## [{version}]"
+          start = text.find(marker)
+          if start == -1:
+              body = f"Release v{version}. See CHANGELOG.md for details.\n"
+          else:
+              rest = text[start:]
+              lines = rest.splitlines()
+              chunk = [lines[0]]
+              for line in lines[1:]:
+                  if line.startswith("## [") and not line.startswith(marker):
+                      break
+                  chunk.append(line)
+              body = "\n".join(chunk).strip() + "\n"
+          Path("release-notes.md").write_text(
+              "> [!WARNING]\n"
+              "> **This release is deprecated.** Migrate to `actions/setup-java`, "
+              "`android-actions/setup-android`, and `gradle/actions/setup-gradle`.\n\n"
+              + body
+          )
+          PY
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.major_tag }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            maintenance.status=deprecated
+
+      - name: Generate image SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          artifact-name: sbom.spdx.json
+          output-file: sbom.spdx.json
+          format: spdx-json
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ steps.meta.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Update moving major tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MAJOR_TAG" "$TAG"
+          git push origin "refs/tags/$MAJOR_TAG" --force
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          MAJOR_TAG: ${{ steps.meta.outputs.major_tag }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }} (deprecated)
+          body_path: release-notes.md
+          files: sbom.spdx.json
+          fail_on_unmatched_files: true
+          generate_release_notes: false

@@ -1,1 +1,4 @@
 .DS_Store
+release-notes.md
+sbom*.spdx.json
+*.spdx.json

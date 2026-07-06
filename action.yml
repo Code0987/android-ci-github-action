@@ -1,10 +1,19 @@
 name: 'android-ci-github-action'
-description: 'A Github action for image for building Android apps with support for multiple SDK Build Tools.'
+description: >-
+  DEPRECATED: Unmaintained Docker action for Android CI (base image last updated 2020).
+  Migrate to actions/setup-java, android-actions/setup-android, and gradle/actions/setup-gradle.
 author: 'code0987 <durgapalneeraj@gmail.com>'
 branding:
-  icon: 'box'
-  color: 'green'
+  icon: 'alert-triangle'
+  color: 'yellow'
+
+inputs:
+  args:
+    description: 'Shell commands to run inside the legacy Android CI container (deprecated).'
+    required: true
 
 runs:
   using: 'docker'
   image: 'Dockerfile'
+  args:
+    - ${{ inputs.args }}

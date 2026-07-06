@@ -1,11 +1,58 @@
 name: Build
 
-on: [push]
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Build the Docker image
-      run: docker build --file Dockerfile .
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          tags: android-ci-github-action:test
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Smoke-test deprecation warning
+        run: |
+          set +e
+          output=$(docker run --rm android-ci-github-action:test 'echo smoke-ok' 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          echo "$output" | grep -q 'android-ci-github-action deprecated'
+          echo "$output" | grep -q 'smoke-ok'
+          test "$status" -eq 0
+
+      - name: Reject empty args
+        run: |
+          set +e
+          docker run --rm android-ci-github-action:test ''
+          status=$?
+          set -e
+          test "$status" -ne 0
+
+      - name: Generate image SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: android-ci-github-action:test
+          artifact-name: sbom-android-ci-github-action.spdx.json
+          format: spdx-json
